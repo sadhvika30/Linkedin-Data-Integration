@@ -1,94 +1,139 @@
-// Copyright 2021 LinkedIn Corporation. All rights reserved.
-// Licensed under the BSD-2 Clause license.
-// See LICENSE in the project root for license information.
+plugins {
+  id "com.commercehub.gradle.plugin.avro-base" version "0.9.1"
+}
 
-buildscript {
-  ext.avroVersion = '1.9.2'
-  ext.awsVersion = '2.10.15'
-  ext.findBugsVersion = '3.0.0'
-  ext.gobblinVersion = '0.18.0-dev-725'
-  ext.hadoopVersion = '2.3.0'
-  ext.hiveVersion = '1.0.1'
-  ext.javaVersion = JavaVersion.VERSION_1_8
-  ext.junitJupiterVersion = '5.6.1'
-  ext.log4jVersion = '1.2.17'
-  ext.pegasusVersion = '28.3.7'
-  ext.slf4jVersion = '1.7.21'
+apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'com.commercehub.gradle.plugin.avro-base'
 
-  apply from: 'gradle/scripts/repositories.gradle'
-  buildscript.repositories.addAll(project.repositories)
+task generateAvro(type: com.commercehub.gradle.plugin.avro.GenerateAvroJavaTask) {
+  source("src/main/avro")
+  outputDir = file("src/main/generatedJava")
+}
 
+compileJava {
+  dependsOn tasks.generateAvro
+}
+
+sourceSets {
+  main {
+    java {
+      srcDir 'src/main/generatedJava'
+    }
+    resources {
+      srcDir 'src/main/avro'
+    }
+  }
+}
+
+jacoco {
+  toolVersion = "0.8.6"
+}
+
+apply from: "$rootDir/gradle/java-publishing.gradle"
+
+dependencies {
+  compile externalDependency.'avro'
+  compile externalDependency.'gson'
+  compile externalDependency.'gobblin-core'
+  compile externalDependency.'gobblin-core-base'
+  compile externalDependency.'gobblin-crypto'
+  compile externalDependency.'gobblin-http'
+  compile externalDependency.'gobblin-runtime'
+  compile externalDependency.'gobblin-metadata'
+  compile externalDependency.'gobblin-metastore'
+  compile externalDependency.'awsCore'
+  compile externalDependency.'awsApacheHttp'
+  compile externalDependency.'awsHttpSpi'
+  compile externalDependency.'awsS3'
+  compile externalDependency.'awsUtils'
+  compile externalDependency.'commonsValidator'
+  compile externalDependency.'guava'
+  compile externalDependency.'commonsLang3'
+  compile externalDependency.'testng'
+  compile externalDependency.'jhyde'
+  compile externalDependency.'li-apache-kafka-clients'
+  //compile externalDependency.'opencsv'
+  implementation(externalDependency.'opencsv') {
+    force = true
+  }
+
+  runtime externalDependency.'gobblin-azkaban'
+  runtime externalDependency.'gobblin-kafka-08'
+  runtime externalDependency.'gobblin-kafka-common'
+  runtime externalDependency.'gobblin-metrics'
+  runtime externalDependency.'gobblin-data-management'
+  runtime externalDependency.'gobblin-sql'
+  runtime externalDependency.'gson'
+  runtime externalDependency.'jodaTime'
+  //runtime externalDependency.'kafkaAvroSerde'
+
+  testCompile externalDependency.'jmockit'
+  testCompile externalDependency.'powermock-core'
+  testCompile externalDependency.'powermock-api-mockito'
+  testCompile externalDependency.'powermock-module-testng'
+  testCompile externalDependency.'mockito-core'
+
+//  compile externalDependency.'slf4j-api'
+//  runtime externalDependency.'commons-csv'
+//  runtime externalDependency.config
+//  runtime externalDependency.'pegasus-data'
+//  runtime externalDependency.reflections
+//  testCompile externalDependency.hsqldb
+}
+
+// Exclude dependencies that are already on the grid from the Hadoop zip
+configurations {
+
+  // dependencies not needed from compile, unit testing, nor production will
+  // be excluded from the package
+  all*.exclude group: 'com.linkedin.hadoop'
+  all*.exclude group: 'com.linkedin.hive'
+  all*.exclude group: 'com.linkedin.pig'
+  all*.exclude group: 'com.linkedin.azkaban'
+  all*.exclude group: 'com.linkedin.azkaban-plugins'
+  all*.exclude group: 'com.linkedin.spark'
+  all*.exclude group: 'kafka'
+  all*.exclude group: 'org.apache.kafka'
+  all*.exclude group: 'org.apache.hive'
+  all*.exclude group: 'ch.qos.logback'
+  all*.exclude group: 'com.ibm.icu', module: 'icu4j'
+  all*.exclude group: 'org.pentaho'
+  all*.exclude group: 'org.slf4j', module: 'log4j-over-slf4j'
+}
+
+shadowJar {
+  zip64 true
   dependencies {
-    classpath 'org.apache.ant:ant:1.9.4'
-    classpath 'org.kt3k.gradle.plugin:coveralls-gradle-plugin:1.0.2'
-    classpath 'me.champeau.gradle:jmh-gradle-plugin:0.4.8'
-    classpath "gradle.plugin.nl.javadude.gradle.plugins:license-gradle-plugin:0.14.0"
-    classpath 'org.jfrog.buildinfo:build-info-extractor-gradle:latest.release'
-    classpath 'com.github.jengelman.gradle.plugins:shadow:5.2.0'
-    classpath "org.shipkit:shipkit-auto-version:latest.release"
-    classpath "org.shipkit:shipkit-changelog:latest.release"
+    include dependency('com.linkedin.cdi:.*')
+    include dependency('com.squareup.retrofit:.*')
+    include dependency('com.squareup.okhttp:.*')
+    include dependency('com.squareup.okhttp3:.*')
+    include dependency('com.squareup.okio:.*')
+    include dependency('org.testng:.*')
   }
+
+  exclude 'log4j.xml'
+  exclude 'log4j.properties'
+  exclude 'org/apache/log4j/**'
+  exclude 'org/apache/spark/**'
+  exclude 'org/slf4j/**'
+  exclude 'javax/ws/rs/**'
+
+  relocate('com.squareup', 'cdi.shaded.com.squareup')
+  relocate('retrofit', 'cdi.shaded.retrofit')
+  relocate('okhttp3', 'cdi.shaded.okhttp3')
+  relocate('okio', 'cdi.shaded.okio')
+  relocate('org.testng', 'cdi.shaded.org.testng')
+  mergeServiceFiles()
 }
 
-apply from: 'gradle/scripts/dependencyDefinitions.gradle'
-apply from: 'gradle/scripts/configureSubprojects.gradle'
-apply from: 'gradle/scripts/jacoco-coveralls-support.gradle'
-apply from: 'gradle/scripts/testSetup.gradle'
-apply from: "gradle/release.gradle"
-
-allprojects {
-  apply plugin: 'idea'
-  apply plugin: 'eclipse'
-  apply plugin: 'checkstyle'
+artifacts {
+  archives shadowJar
 }
 
-subprojects {
-  dependencies {
-  }
-  project.buildDir = new File(project.rootProject.buildDir, project.name)
-}
-
-subprojects { sp ->
-  apply plugin: 'maven'
-
-  plugins.withType(JavaPlugin) {
-    dependencies {
-      testCompile externalDependency.testng
-    }
-
-    tasks.withType(Test) {
-      useTestNG()
-    }
-
-    checkstyle {
-      configDirectory = file("${project.rootDir}/gradle/checkstyle")
-      sourceSets = [ getProject().sourceSets.main, getProject().sourceSets.test ]
-      toolVersion = "8.35"
-      maxWarnings = 0
-      ignoreFailures = false
-    }
-    checkstyleMain.source = ["src/main/java", "src/test/java"]
-  }
-
-  afterEvaluate {
-    if (project.plugins.hasPlugin('java')) {
-      sourceCompatibility = 1.8
-      targetCompatibility = 1.8
-    }
-  }
-
-  afterEvaluate {
-    if (project.plugins.hasPlugin('pegasus')) {
-      dependencies {
-        dataTemplateCompile spec.product.pegasus.data
-        restClientCompile spec.product.pegasus.restliClient
-      }
-    }
-  }
-}
-
-task printVersionName {
-  doLast {
-    println project.version
+test {
+  doFirst {
+    def jmockitPath = configurations.getByName("testCompile").copy().files.find {it.name.contains("jmockit") }.absolutePath
+    jvmArgs "-javaagent:$jmockitPath"
   }
 }
